@@ -1,0 +1,72 @@
+--
+- hosts: localhost
+  connection: local
+  sudo: yes
+
+
+  vars:
+    - homeDir: ~/projects
+    - appDir : app
+    - repo: analisis_module_sit
+    - account: alfacomander
+    - dbname: sit
+    - dbuser: sit
+    - dbpassword: sit
+
+
+  tasks:
+  - name: Install Packages
+    apt: name={{ item }} update_cache=yes state=latest
+    with_items:
+      - build-essential
+      - npm
+      - nodejs-legacy
+      - git
+      - mcrypt
+      - nginx
+      - curl
+      - postgresql
+      - libpq-dev
+      - python-psycopg2
+
+  - name: Install pm2
+    npm: name=pm2 global=yes production=yes
+
+  - name: Ensure database is created
+    sudo: yes
+    sudo_user: postgres
+    postgresql_db: name={{dbname}}
+
+  - name: Ensure user has access to database
+    sudo: true
+    sudo_user: postgres
+    postgresql_user: db={{dbname}} name={{dbuser}} password={{dbpassword}} priv=ALL
+
+  - name: Install forever to run Node.js app
+    npm: name=forever global=yes state=present
+
+  - name: Create APP Directory
+    file: path={{homeDir}}/{{appDir}} state=directory
+
+  - name: Git Clone Repo
+    git: repo=git://github.com/{{account}}/{{repo}}.git dest={{homeDir}}/{{appDir}} update=yes force=yes
+    register: git_finished
+
+  - name: Running NPM install
+    npm: path={{homeDir}}/{{appDir}}/server
+    register: npm_finished
+    when: git_finished.changed
+
+  - name: Start Node.js app
+    command: forever start {{homeDir}}/{{appDir}}/server/server.js
+
+#  - name: Stop APP
+#    sudo_user: root
+#    command: pm2 stop app chdir={{homeDir}}/{{appDir}}/server
+#    ignore_errors: yes
+
+#  - name: Start APP
+#    sudo_user: root
+#    command: pm2 start server.js --name app chdir={{homeDir}}/{{appDir}}/server
+#    ignore_errors: yes
+#    when: npm_finished.changed
